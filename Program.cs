@@ -17,6 +17,15 @@ using MarksApi.Models;
 using MarksApi.DTOs.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
+// Problem Details for standardized API errors
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["traceId"] =
+            context.HttpContext.TraceIdentifier;
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -87,6 +96,11 @@ builder.Services.AddAuthentication(
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+// Global exception handling
+app.UseExceptionHandler();
+
+// Standardized responses for empty HTTP error statuses
+app.UseStatusCodePages();
 // Health Check Endpoint
 app.MapHealthChecks("/health");
 if (app.Environment.IsDevelopment())
