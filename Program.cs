@@ -1,4 +1,5 @@
 using MarksApi.DTOs.Students;
+using Microsoft.Extensions.Validation;
 using Microsoft.OpenApi;
 using MarksApi.DTOs.Enrollments;
 using MarksApi.DTOs.Reports;
@@ -17,6 +18,7 @@ using MarksApi.Models;
 using MarksApi.DTOs.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddValidation();
 // Problem Details for standardized API errors
 builder.Services.AddProblemDetails(options =>
 {
