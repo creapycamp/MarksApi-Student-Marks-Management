@@ -686,11 +686,71 @@ enrollmentGroup.MapPost("/", async (
               enrollment.Mark, enrollment.EnrolledAtUtc });
 });
 
-// 2. GET ALL ENROLLMENTS
-enrollmentGroup.MapGet("/", async (AppDbContext db) =>
+
+// 2. GET ALL ENROLLMENTS (Pagination, Search & Sorting)
+enrollmentGroup.MapGet("/", async (
+    AppDbContext db,
+    int page = 1,
+    int pageSize = 10,
+    string? search = null,
+    string sortBy = "enrolledat",
+    bool descending = true,
+    CancellationToken cancellationToken = default) =>
 {
-    var enrollments = await db.Enrollments
+    // Validate pagination
+    if (page < 1)
+        return Results.BadRequest("Page must be at least 1.");
+
+    if (pageSize < 1 || pageSize > 50)
+        return Results.BadRequest("PageSize must be between 1 and 50.");
+
+    // Base query
+    var query = db.Enrollments
         .AsNoTracking()
+        .AsQueryable();
+
+    // Search by student name, registration number,
+    // course code, or course title
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        search = search.Trim();
+
+        query = query.Where(e =>
+            e.Student.FullName.ToLower().Contains(search.ToLower()) ||
+            e.Student.RegistrationNo.ToLower().Contains(search.ToLower()) ||
+            e.Course.Code.ToLower().Contains(search.ToLower()) ||
+            e.Course.Title.ToLower().Contains(search.ToLower()));
+    }
+
+    // Total records before pagination
+    var totalRecords = await query.CountAsync(cancellationToken);
+
+    // Sorting
+    query = sortBy.ToLower() switch
+    {
+        "enrolledat" => descending
+            ? query.OrderByDescending(e => e.EnrolledAtUtc)
+            : query.OrderBy(e => e.EnrolledAtUtc),
+
+        "studentid" => descending
+            ? query.OrderByDescending(e => e.StudentId)
+            : query.OrderBy(e => e.StudentId),
+
+        "courseid" => descending
+            ? query.OrderByDescending(e => e.CourseId)
+            : query.OrderBy(e => e.CourseId),
+
+        "mark" => descending
+            ? query.OrderByDescending(e => e.Mark)
+            : query.OrderBy(e => e.Mark),
+
+        _ => query.OrderByDescending(e => e.EnrolledAtUtc)
+    };
+
+    // Pagination and DTO projection
+    var enrollments = await query
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
         .Select(e => new EnrollmentResponseDto
         {
             Id = e.Id,
@@ -702,10 +762,21 @@ enrollmentGroup.MapGet("/", async (AppDbContext db) =>
             Mark = e.Mark,
             EnrolledAtUtc = e.EnrolledAtUtc
         })
-        .ToListAsync();
+        .ToListAsync(cancellationToken);
 
-    return Results.Ok(enrollments);
+    var totalPages = (int)Math.Ceiling(
+        totalRecords / (double)pageSize);
+
+    return Results.Ok(new
+    {
+        Page = page,
+        PageSize = pageSize,
+        TotalRecords = totalRecords,
+        TotalPages = totalPages,
+        Data = enrollments
+    });
 });
+
 
 // 3. GET ENROLLMENT BY ID
 enrollmentGroup.MapGet("/{id:int}", async (
