@@ -30,8 +30,6 @@ builder.Services.AddProblemDetails(options =>
 });
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -99,11 +97,10 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 // Global exception handling
+// Global exception handling
 app.UseExceptionHandler();
 
 // Standardized responses for empty HTTP error statuses
-app.UseExceptionHandler();
-app.UseStatusCodePages();
 app.UseStatusCodePages();
 // Health Check Endpoint
 app.MapHealthChecks("/health");
