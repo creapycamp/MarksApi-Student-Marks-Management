@@ -96,6 +96,7 @@ builder.Services.AddAuthentication(
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+app.UseHttpsRedirection();
 // Global exception handling
 // Global exception handling
 app.UseExceptionHandler();
