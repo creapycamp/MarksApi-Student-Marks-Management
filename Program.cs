@@ -881,34 +881,62 @@ logger.LogInformation(
 });
 
  // 6. GET COURSE AVERAGE
-courseGroup.MapGet("/{courseId:int}/average", async (
+// GET COURSE STATISTICS
+courseGroup.MapGet("/{courseId:int}/stats", async (
     int courseId,
     AppDbContext db,
+    IConfiguration configuration,
     CancellationToken cancellationToken) =>
 {
     var course = await db.Courses
         .AsNoTracking()
-        .FirstOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+        .FirstOrDefaultAsync(
+            c => c.Id == courseId,
+            cancellationToken);
 
     if (course is null)
         return Results.NotFound("Course not found.");
 
-    var gradedCount = await db.Enrollments
-        .CountAsync(e =>
-            e.CourseId == courseId && e.Mark.HasValue,
+    // Read configured pass mark
+    var passMark = configuration.GetValue<int>("Marks:PassMark");
+
+    // Total enrolled students
+    var enrolledCount = await db.Enrollments
+        .CountAsync(
+            e => e.CourseId == courseId,
             cancellationToken);
 
+    // Students who have received marks
+    var gradedCount = await db.Enrollments
+        .CountAsync(
+            e => e.CourseId == courseId && e.Mark.HasValue,
+            cancellationToken);
+
+    // Students who passed
+    var passedCount = await db.Enrollments
+        .CountAsync(
+            e => e.CourseId == courseId &&
+                 e.Mark.HasValue &&
+                 e.Mark.Value >= passMark,
+            cancellationToken);
+
+    // Average of graded students
     var average = await db.Enrollments
         .Where(e => e.CourseId == courseId && e.Mark.HasValue)
-        .AverageAsync(e => (double?)e.Mark, cancellationToken);
+        .AverageAsync(
+            e => (double?)e.Mark,
+            cancellationToken);
 
     return Results.Ok(new
     {
         course.Id,
         course.Code,
         course.Title,
-        AverageMark = average,
-        GradedStudentCount = gradedCount
+        Enrolled = enrolledCount,
+        Graded = gradedCount,
+        Passed = passedCount,
+        PassMark = passMark,
+        AverageMark = average
     });
 });
 
