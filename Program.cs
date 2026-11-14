@@ -128,11 +128,11 @@ await using (var scope = app.Services.CreateAsyncScope())
     );
 }
 
-// JWT Login Endpoint
 app.MapPost("/api/auth/login",
     async (LoginRequestDto request,
            AppDbContext context,
-           IConfiguration configuration) =>
+           IConfiguration configuration,
+           ILogger<Program> logger) =>
 {
     if (string.IsNullOrWhiteSpace(request.Username) ||
         string.IsNullOrWhiteSpace(request.Password))
@@ -145,7 +145,10 @@ app.MapPost("/api/auth/login",
         .SingleOrDefaultAsync(u => u.Username == request.Username);
 
     if (user == null)
-        return Results.Unauthorized();
+{
+    logger.LogWarning("Login failed: user account not found.");
+    return Results.Unauthorized();
+}
 
     // Verify password
     var passwordHasher = new PasswordHasher<User>();
@@ -157,7 +160,13 @@ app.MapPost("/api/auth/login",
     );
 
     if (verificationResult == PasswordVerificationResult.Failed)
-        return Results.Unauthorized();
+{
+    logger.LogWarning(
+        "Login failed: incorrect password for user ID {UserId}.",
+        user.Id);
+
+    return Results.Unauthorized();
+}
 
     // Read JWT configuration
     var jwtKey = configuration["Jwt:Key"];
@@ -211,7 +220,10 @@ app.MapPost("/api/auth/login",
 
     var tokenString = new JwtSecurityTokenHandler()
         .WriteToken(token);
-
+logger.LogInformation(
+    "User {UserId} logged in successfully with role {Role}.",
+    user.Id,
+    user.Role);
     // Return login response
     var response = new LoginResponseDto
     {
@@ -248,7 +260,8 @@ var studentGroup = app.MapGroup("/api/students")
 // 1. CREATE STUDENT
 studentGroup.MapPost("/", async (
     CreateStudentDto dto,
-    AppDbContext db) =>
+    AppDbContext db,
+    ILogger<Program> logger) =>
 {
     if (string.IsNullOrWhiteSpace(dto.RegistrationNo) ||
         string.IsNullOrWhiteSpace(dto.FullName) ||
@@ -275,7 +288,9 @@ studentGroup.MapPost("/", async (
     };
 
     db.Students.Add(student);
-    await db.SaveChangesAsync();
+    logger.LogInformation(
+    "Student {StudentId} created successfully.",
+    student.Id);
 
     var response = new StudentResponseDto
     {
@@ -463,7 +478,8 @@ var courseGroup = app.MapGroup("/api/courses")
 // 1. CREATE COURSE
 courseGroup.MapPost("/", async (
     CreateCourseDto dto,
-    AppDbContext db) =>
+    AppDbContext db,
+    ILogger<Program> logger) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Code) ||
         string.IsNullOrWhiteSpace(dto.Title))
@@ -490,6 +506,10 @@ courseGroup.MapPost("/", async (
 
     db.Courses.Add(course);
     await db.SaveChangesAsync();
+logger.LogInformation(
+    "Course {CourseId} ({CourseCode}) created successfully.",
+    course.Id,
+    course.Code);
 
     var response = new CourseResponseDto
     {
@@ -667,7 +687,8 @@ var enrollmentGroup = app.MapGroup("/api/enrollments")
 // 1. CREATE ENROLLMENT
 enrollmentGroup.MapPost("/", async (
     CreateEnrollmentDto dto,
-    AppDbContext db) =>
+    AppDbContext db,
+    ILogger<Program> logger) =>
 {
     if (dto.StudentId <= 0 || dto.CourseId <= 0)
         return Results.BadRequest("Valid StudentId and CourseId are required.");
@@ -700,6 +721,11 @@ enrollmentGroup.MapPost("/", async (
 
     db.Enrollments.Add(enrollment);
     await db.SaveChangesAsync();
+logger.LogInformation(
+    "Enrollment {EnrollmentId} created for Student {StudentId} in Course {CourseId}.",
+    enrollment.Id,
+    enrollment.StudentId,
+    enrollment.CourseId);
 
     return Results.Created(
         $"/api/enrollments/{enrollment.Id}",
@@ -829,7 +855,8 @@ enrollmentGroup.MapGet("/{id:int}", async (
 enrollmentGroup.MapPut("/{id:int}/mark", async (
     int id,
     UpdateEnrollmentMarkDto dto,
-    AppDbContext db) =>
+    AppDbContext db,
+    ILogger<Program> logger) =>
 {
     if (dto.Mark.HasValue &&
         (dto.Mark.Value < 0 || dto.Mark.Value > 100))
@@ -845,6 +872,10 @@ enrollmentGroup.MapPut("/{id:int}/mark", async (
     enrollment.Mark = dto.Mark;
 
     await db.SaveChangesAsync();
+logger.LogInformation(
+    "Mark updated for Enrollment {EnrollmentId}. New Mark: {Mark}.",
+    enrollment.Id,
+    enrollment.Mark);
 
     return Results.Ok("Enrollment mark updated successfully.");
 });
@@ -962,7 +993,8 @@ app.MapGet("/api/students/{studentId:int}/transcript", async (
 // 5. DELETE ENROLLMENT
 enrollmentGroup.MapDelete("/{id:int}", async (
     int id,
-    AppDbContext db) =>
+    AppDbContext db,
+    ILogger<Program> logger) =>
 {
     var enrollment = await db.Enrollments.FindAsync(id);
 
@@ -971,6 +1003,9 @@ enrollmentGroup.MapDelete("/{id:int}", async (
 
     db.Enrollments.Remove(enrollment);
     await db.SaveChangesAsync();
+logger.LogInformation(
+    "Enrollment {EnrollmentId} deleted successfully.",
+    id);
 
     return Results.Ok("Enrollment deleted successfully.");
 });
